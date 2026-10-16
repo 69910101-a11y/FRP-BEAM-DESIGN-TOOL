@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FRP Beam Design</title>
+<style>
+  :root{
+    --navy:#1f3864; --ink:#1a1a1a; --muted:#5f5f5f; --rule:#d4d4d4; --hair:#e6e6e6;
+    --in-bg:#fff2cc; --in-ink:#0000ff; --res-bg:#ddebf7;
+    --ok-bg:#c6efce; --ok-ink:#006100; --ng-bg:#ffc7ce; --ng-ink:#9c0006; --info-bg:#ffeb9c; --info-ink:#9c5700;
+    --paper:#ffffff; --desk:#eef0f3;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--desk);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+  .toolbar{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .toolbar .title{font-weight:700;color:var(--navy);margin-right:auto;font-size:14px}
+  .btn{font:inherit;font-size:13px;padding:7px 12px;border:1px solid var(--navy);background:#fff;color:var(--navy);border-radius:4px;cursor:pointer}
+  .btn.primary{background:var(--navy);color:#fff}
+  .btn:hover{filter:brightness(0.95)}
+  .sheet{background:var(--paper);max-width:1100px;margin:0 auto 32px;padding:22px 24px 16px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:2px solid var(--navy);padding-bottom:8px}
+  .logo{height:52px;min-width:120px;display:flex;align-items:center;cursor:pointer;position:relative}
+  .logo img{height:100%;width:auto;display:block}
+  .logo .ph{border:1px dashed #aaa;color:#999;font-size:11px;padding:16px 20px}
+  .heading{text-align:right}
+  .heading h1{margin:0;font-size:20px;color:var(--navy)}
+  .heading p{margin:3px 0 0;font-size:12px;font-style:italic;color:#404040}
+  .info{display:grid;grid-template-columns:1fr 1fr;column-gap:22px;margin-top:6px}
+  .info .row{display:grid;grid-template-columns:110px 1fr;align-items:center;border-bottom:1px solid var(--hair);min-height:20px}
+  .info label{font-weight:700;font-size:12px}
+  .info input{border:0;background:transparent;color:var(--in-ink);font-weight:700;font:inherit;font-size:12px;font-weight:700;padding:2px 0;width:100%}
+  .cols{display:grid;grid-template-columns:1fr 1fr;column-gap:22px;margin-top:6px;align-items:start}
+  table.calc{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+  table.calc col.c-lab{width:auto} table.calc col.c-sym{width:58px} table.calc col.c-val{width:76px}
+  table.calc col.c-unit{width:44px} table.calc col.c-chk{width:36px} table.calc col.c-ref{width:74px}
+  table.calc td{border-bottom:1px solid var(--hair);padding:1px 3px;height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+  th.sec{background:var(--navy);color:#fff;text-align:left;font-size:12px;padding:3px 5px;letter-spacing:.2px}
+  td.sym{font-style:italic;text-align:center}
+  td.val{text-align:right;font-variant-numeric:tabular-nums}
+  td.val.res{background:var(--res-bg);font-weight:700}
+  td.unit{padding-left:4px}
+  td.ref{font-size:10px;font-style:italic;color:var(--muted)}
+  td.chk{text-align:center;font-weight:700;font-size:11px}
+  td.txt{color:#833c0b;font-weight:700}
+  .ok{background:var(--ok-bg);color:var(--ok-ink)} .ng{background:var(--ng-bg);color:var(--ng-ink)} .info-s{background:var(--info-bg);color:var(--info-ink)}
+  td.inp{padding:0;background:var(--in-bg)}
+  td.inp input, td.inp select{width:100%;border:0;background:transparent;color:var(--in-ink);font:inherit;font-weight:700;text-align:right;padding:2px 4px;height:19px}
+  td.inp select{text-align:center;text-align-last:center;appearance:none;-webkit-appearance:none;cursor:pointer}
+  td.inp input:focus, td.inp select:focus{outline:2px solid var(--navy);outline-offset:-2px;background:#fff}
+  input[type=number]::-webkit-inner-spin-button{opacity:.4}
+  .xsec{border:1px solid #a6a6a6;border-top:0;display:grid;grid-template-columns:180px 1fr;gap:6px;padding:6px 8px;align-items:center;height:268px}
+  .xsec svg{width:100%;height:256px}
+  .xsec ul{list-style:none;margin:0;padding:0;font-size:12px;color:var(--navy);line-height:1.75}
+  .xsec ul li:first-child{font-weight:700}
+  .xsec .note{font-size:9.5px;color:#888;font-style:italic;margin-top:4px}
+  .summary td.lab{font-weight:700}
+  .overall{margin-top:8px;border-top:2px solid var(--navy);border-bottom:2px solid var(--navy);display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--navy);font-size:14px}
+  .overall span:first-child{padding:4px 2px}
+  .overall .chk{padding:4px 34px;font-size:14px}
+  .legend{font-size:10px;font-style:italic;color:var(--muted);margin-top:4px}
+  .legend b{font-style:normal}
+  @media (max-width:860px){
+    .cols,.info{grid-template-columns:1fr}
+    .sheet{padding:14px 16px}
+    .heading h1{font-size:16px}
+    header.top{flex-wrap:wrap}
+  }
+  @media (max-width:600px){
+    table.calc col.c-ref{width:0} td.ref{display:none}
+    table.calc col.c-sym{width:44px} table.calc col.c-val{width:70px} table.calc col.c-unit{width:40px} table.calc col.c-chk{width:32px}
+    table.calc{font-size:11.5px}
+  }
+  @media print{
+    input[type=number]{-moz-appearance:textfield;appearance:textfield}
+    input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+    @page{size:A4 portrait;margin:7mm}
+    html,body{background:#fff}
+    .toolbar{display:none}
+    .sheet{box-shadow:none;margin:0;padding:0;max-width:none;width:1100px;zoom:0.68}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .cols{grid-template-columns:1fr 1fr!important}
+    .info{grid-template-columns:1fr 1fr!important}
+    .logo .ph{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span class="title">FRP beam design · ACI 440.1R-15</span>
+  <button class="btn" id="btnLogo" title="Replace the logo shown at the top">Change logo</button>
+  <button class="btn" id="btnReset">Reset to example</button>
+  <button class="btn" id="btnSave">Save inputs (.json)</button>
+  <button class="btn" id="btnLoad">Load inputs</button>
+  <button class="btn primary" id="btnPrint">Print / Save PDF</button>
+  <input type="file" id="fileLogo" accept="image/*" hidden>
+  <input type="file" id="fileLoad" accept=".json,application/json" hidden>
+</div>
+
+<div class="sheet" id="sheet">
+  <header class="top">
+    <div class="logo" id="logoBox" title="Click to replace logo"><img id="logoImg" alt="Logo" src="data:image/jpeg;base64,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"></div>
+    <div class="heading">
+      <h1>FRP-REINFORCED CONCRETE BEAM DESIGN</h1>
+      <p>Flexure · Serviceability · Creep rupture · Shear — ACI 440.1R-15 (SI units)</p>
+    </div>
+  </header>
+  <div class="info" id="info"></div>
+  <div class="cols">
+    <div id="colL"></div>
+    <div id="colR"></div>
+  </div>
+  <div class="overall"><span id="overallTxt"></span><span class="chk" id="overallChk"></span></div>
+  <div class="legend"><b>Legend:</b> blue on yellow = input (edit directly) · black = calculated · shaded blue = key result. Equation numbers refer to ACI 440.1R-15 unless noted (318 = ACI 318-11). Simply supported beam, uniform load, single layer of bars.</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ------------------------------------------------------------------ defaults (worked example) */
+const DEFAULTS = {
+  project:"Hospital floor beam", beamNo:"B-1", location:"-", designer:"-", owner:"-", date:"12/10/2026",
+  fib:"GFRP", exp:"Interior", ffus:620.6, efus:0.014, Ef:44800, fc:27.6, lam:1.0, ecu:0.003, gc:24,
+  Ln:3.35, b:180, h:305, hmax:350, cov:38, dst:10, db:19, n:2, wsd:3.0, wL:5.8, psl:20,
+  wmax:0.7, kb:1.4, xi:2.0, phiv:0.75, rbdb:3
+};
+const STORE = "frp-beam-aci440-inputs";
+let S = Object.assign({}, DEFAULTS);
+try { const saved = JSON.parse(localStorage.getItem(STORE) || "null"); if (saved) S = Object.assign({}, DEFAULTS, saved); } catch(e) {}
+
+/* ------------------------------------------------------------------ calculation engine (mirrors the workbook) */
+function calc(i){
+  const v = Object.assign({}, i);
+  const sq = Math.sqrt, min = Math.min, max = Math.max, PI = Math.PI;
+  v.CE = i.exp==="Interior" ? ({CFRP:1, GFRP:0.8, AFRP:0.9})[i.fib] : ({CFRP:0.9, GFRP:0.7, AFRP:0.8})[i.fib];
+  v.ffu = v.CE*i.ffus; v.efu = v.CE*i.efus;
+  v.Ec = 4700*sq(i.fc);
+  v.b1 = max(0.65, min(0.85, 0.85-0.05*(i.fc-28)/7));
+  // geometry & loads
+  v.hmin = i.Ln*1000/10;
+  v.d = i.h - i.cov - i.dst - i.db/2;
+  v.Af = i.n*PI*i.db*i.db/4;
+  v.wsw = i.gc*i.b*i.h/1e6; v.wD = v.wsw + i.wsd; v.PSL = i.psl/100;
+  v.wu = 1.2*v.wD + 1.6*i.wL; v.Mu = v.wu*i.Ln*i.Ln/8; v.Vus = v.wu*i.Ln/2;
+  // flexure
+  v.rf = v.Af/(i.b*v.d);
+  v.rfb = 0.85*v.b1*i.fc/v.ffu * i.Ef*i.ecu/(i.Ef*i.ecu + v.ffu);
+  v.rr = v.rf/v.rfb;
+  v.mode = v.rr>=1.4 ? "Concrete crushing (compression-controlled)" : (v.rr>1 ? "Transition zone (concrete crushing)" : "FRP rupture (tension-controlled)");
+  const Eu = i.Ef*i.ecu;
+  v.ff = v.rf>v.rfb ? min(v.ffu, sq(Eu*Eu/4 + 0.85*v.b1*i.fc/v.rf*Eu) - 0.5*Eu) : v.ffu;
+  v.a = v.Af*v.ff/(0.85*i.fc*i.b);
+  v.cb = i.ecu/(i.ecu+v.efu)*v.d;
+  v.Mn = (v.rf>v.rfb ? v.Af*v.ff*(v.d - v.a/2) : v.Af*v.ffu*(v.d - v.b1*v.cb/2))/1e6;
+  v.phi = v.rf<=v.rfb ? 0.55 : (v.rf>=1.4*v.rfb ? 0.65 : 0.3+0.25*v.rf/v.rfb);
+  v.phiMn = v.phi*v.Mn; v.ucm = v.Mu/v.phiMn;
+  v.Afmin = max(0.41*sq(i.fc)/v.ffu*i.b*v.d, 2.3/v.ffu*i.b*v.d);
+  // service section
+  v.MD = v.wD*i.Ln*i.Ln/8; v.ML = i.wL*i.Ln*i.Ln/8; v.Ma = v.MD+v.ML; v.Ms = v.MD + v.PSL*v.ML;
+  v.nf = i.Ef/v.Ec; const rn = v.rf*v.nf;
+  v.k = sq(2*rn + rn*rn) - rn;
+  v.Ig = i.b*Math.pow(i.h,3)/12;
+  v.Icr = i.b*Math.pow(v.d,3)/3*Math.pow(v.k,3) + v.nf*v.Af*v.d*v.d*Math.pow(1-v.k,2);
+  v.Mcr = 0.62*i.lam*sq(i.fc)*v.Ig/(i.h/2)/1e6;
+  // creep rupture
+  v.crf = i.fib==="GFRP" ? 0.2 : (i.fib==="AFRP" ? 0.3 : 0.55);
+  v.ffslim = v.crf*v.ffu;
+  v.ffsus = v.Ms*1e6*v.nf*v.d*(1-v.k)/v.Icr;
+  // crack control
+  v.ffs = v.Ma*1e6*v.nf*v.d*(1-v.k)/v.Icr;
+  v.beta = (i.h - v.k*v.d)/(v.d - v.k*v.d);
+  v.dc = i.h - v.d;
+  v.dclim = i.Ef*i.wmax/(2*v.ffs*v.beta*i.kb);
+  v.sprov = i.n>1 ? (i.b - 2*(i.cov+i.dst+i.db/2))/(i.n-1) : 0;
+  v.smax = min(1.15*i.Ef*i.wmax/(v.ffs*i.kb) - 2.5*(i.cov+i.dst), 0.92*i.Ef*i.wmax/(v.ffs*i.kb));
+  v.sclr = v.sprov - i.db;
+  v.wcalc = 2*v.ffs/i.Ef*v.beta*i.kb*sq(v.dc*v.dc + Math.pow(v.sprov/2,2));
+  // deflection
+  const Ie = M => { if (M<=v.Mcr) return v.Ig; const g = 1.72-0.72*v.Mcr/M; return min(v.Ig, v.Icr/(1 - g*Math.pow(v.Mcr/M,2)*(1-v.Icr/v.Ig))); };
+  const D = (M,I) => 5*M*1e6*Math.pow(i.Ln*1000,2)/(48*v.Ec*I);
+  v.IeD = Ie(v.MD); v.gam = 1.72-0.72*min(1, v.Mcr/v.Ma); v.IeDL = Ie(v.Ma);
+  v.dD = D(v.MD, v.IeD); v.dDL = D(v.Ma, v.IeDL); v.dL = v.dDL - v.dD;
+  v.dsus = D(v.Ms, v.IeDL); v.dLun = v.dDL - v.dsus;
+  v.dinc = 0.6*i.xi*v.dsus + v.dLun; v.dall = i.Ln*1000/240;
+  // shear
+  v.Vu = v.Vus - v.wu*v.d/1000;
+  v.Vc = 0.4*sq(i.fc)*i.b*v.k*v.d/1000; v.phiVc = i.phiv*v.Vc;
+  v.shneed = v.Vu>v.phiVc ? "Required for strength (Vu > ϕVc)" : (v.Vu>v.phiVc/2 ? "Minimum required (Vu > ϕVc/2)" : "Not required (Vu ≤ ϕVc/2)");
+  v.Vsmax = i.phiv*0.66*sq(i.fc)*i.b*v.d/1000;
+  v.ffb = min(v.ffu, (0.05*i.rbdb+0.3)*v.ffu);
+  v.ffv = min(0.004*i.Ef, v.ffb);
+  v.Afv = 2*PI*i.dst*i.dst/4;
+  v.s1 = v.Vu>v.phiVc ? i.phiv*v.Afv*v.ffv*v.d/((v.Vu-v.phiVc)*1000) : Infinity;
+  v.s2 = v.Afv*v.ffv/(0.35*i.b);
+  v.s3 = (v.Vu-v.phiVc > i.phiv*0.33*sq(i.fc)*i.b*v.d/1000) ? min(v.d/4,300) : min(v.d/2,600);
+  v.sgov = min(v.s1, v.s2, v.s3);
+  v.sadopt = Math.floor(v.sgov/25)*25;
+  // checks
+  const C = {};
+  C.hmax = i.h < i.hmax ? "OK" : "NG";
+  C.hmin = i.h >= v.hmin ? "OK" : "Info";
+  C.phiMn = v.phiMn >= v.Mu ? "OK" : "NG";
+  C.ucm = v.ucm <= 1 ? "OK" : "NG";
+  C.Afmin = v.rf>v.rfb ? "N/A" : (v.Af>=v.Afmin ? "OK" : "NG");
+  C.ffsus = v.ffsus <= v.ffslim ? "OK" : "NG";
+  C.dc = v.dc <= v.dclim ? "OK" : "NG";
+  C.sprov = i.n<2 ? "N/A" : (v.sprov <= v.smax ? "OK" : "NG");
+  C.sclr = i.n<2 ? "N/A" : (v.sclr >= max(i.db,25) ? "OK" : "NG");
+  C.wcalc = v.wcalc <= i.wmax ? "OK" : "NG";
+  C.dinc = v.dinc <= v.dall ? "OK" : "NG";
+  C.Vsmax = (v.Vu - v.phiVc) <= v.Vsmax ? "OK" : "NG";
+  C.sadopt = v.sadopt>0 && v.sadopt <= v.sgov ? "OK" : "NG";
+  v.C = C;
+  return v;
+}
+
+/* ------------------------------------------------------------------ sheet definition (same rows as the workbook) */
+// row: [key, label, symbol, unit, fmt, ref, opts]  opts: {input:'num'|'sel', options, res, chk, step}
+const H = t => ({h:t});
+const R = (k,l,s,u,f,ref,o={}) => Object.assign({k,l,s,u,f,ref},o);
+const NUM = {input:"num"};
+const LEFT = [
+  H("1. MATERIALS"),
+  R("fib","FRP bar type","","","t","Table 6.2",{input:"sel",options:["GFRP","CFRP","AFRP"]}),
+  R("exp","Exposure condition","","","t","Table 6.2",{input:"sel",options:["Interior","Exterior"]}),
+  R("ffus","Guaranteed tensile strength","f*fu","MPa",1,"Given",NUM),
+  R("efus","Guaranteed rupture strain","ε*fu","",4,"Given",Object.assign({step:0.001},NUM)),
+  R("Ef","FRP modulus of elasticity","Ef","MPa",0,"Given",NUM),
+  R("CE","Environmental reduction factor","CE","",2,"Table 6.2"),
+  R("ffu","Design tensile strength = CE·f*fu","ffu","MPa",1,"Eq. 6.2a"),
+  R("efu","Design rupture strain = CE·ε*fu","εfu","",5,"Eq. 6.2b"),
+  R("fc","Concrete strength","f'c","MPa",1,"Given",NUM),
+  R("lam","Concrete density factor (normal wt.)","λ","",2,"ACI 318",NUM),
+  R("Ec","Concrete modulus = 4700√f'c","Ec","MPa",0,"318 §8.5.1"),
+  R("ecu","Ultimate concrete strain","εcu","",3,"§7.2.2",NUM),
+  R("b1","Stress-block factor","β1","",3,"318 §10.2.7"),
+  R("gc","Unit weight of concrete","γc","kN/m³",1,"Assumed",NUM),
+  H("2. GEOMETRY, REINFORCEMENT & LOADS"),
+  R("Ln","Effective span (simply supported)","ℓ","m",2,"Given",NUM),
+  R("b","Beam width","b","mm",0,"Trial",NUM),
+  R("h","Overall depth","h","mm",0,"Trial",NUM),
+  R("hmax","Max. depth (construction)","hmax","mm",0,"Given",Object.assign({chk:"hmax"},NUM)),
+  R("hmin","Recommended min. depth = ℓ/10","hmin","mm",0,"Tbl 7.3.2.1",{chk:"hmin"}),
+  R("cov","Clear cover (to stirrup)","cover","mm",0,"440.5 Tbl 3.1",NUM),
+  R("dst","Stirrup bar diameter","ds","mm",0,"Trial",NUM),
+  R("db","Main bar diameter","db","mm",0,"Trial",NUM),
+  R("n","Number of main bars (one layer)","n","nos",0,"Trial",NUM),
+  R("d","Effective depth = h − cover − ds − db/2","d","mm",1,""),
+  R("Af","Area of FRP = n·π·db²/4","Af","mm²",1,""),
+  R("wsw","Self-weight = γc·b·h","wsw","kN/m",2,""),
+  R("wsd","Superimposed dead load","wSD","kN/m",2,"Given",NUM),
+  R("wD","Total dead load","wD","kN/m",2,""),
+  R("wL","Live load","wL","kN/m",2,"Given",NUM),
+  R("psl","Sustained portion of live load","PSL","%",0,"Given",NUM),
+  R("wu","Factored load = 1.2wD + 1.6wL","wu","kN/m",2,"318 Eq. 9-2"),
+  R("Mu","Factored moment = wu·ℓ²/8","Mu","kN·m",2,""),
+  R("Vus","Factored shear at support = wu·ℓ/2","Vu,s","kN",2,""),
+  H("3. FLEXURAL STRENGTH"),
+  R("rf","Reinforcement ratio = Af/(b·d)","ρf","",5,"Eq. 7.2.1a"),
+  R("rfb","Balanced ratio","ρfb","",5,"Eq. 7.2.1b"),
+  R("rr","ρf / ρfb","","",2,""),
+  R("mode","Failure mode","","","txt",""),
+  R("ff","FRP stress at ultimate (ρf > ρfb)","ff","MPa",1,"Eq. 7.2.2d"),
+  R("a","Depth of stress block = Af·ff/(0.85f'c·b)","a","mm",1,"Eq. 7.2.2b"),
+  R("cb","Balanced neutral axis = εcu/(εcu+εfu)·d","cb","mm",1,"Eq. 7.2.2h"),
+  R("Mn","Nominal moment","Mn","kN·m",2,"Eq. 7.2.2a/g"),
+  R("phi","Strength reduction factor","ϕ","",3,"Eq. 7.2.3"),
+  R("phiMn","Design moment ϕMn ≥ Mu","ϕMn","kN·m",2,"",{res:1,chk:"phiMn"}),
+  R("ucm","Unity check = Mu/ϕMn","","",2,"",{chk:"ucm"}),
+  R("Afmin","Min. FRP area (only if ρf < ρfb)","Af,min","mm²",1,"Eq. 7.2.4",{chk:"Afmin"}),
+  H("4. CREEP-RUPTURE STRESS"),
+  R("crf","Creep-rupture stress limit factor","","",2,"Table 7.4.1"),
+  R("ffslim","Allowable sustained stress","ffs,max","MPa",1,"Table 7.4.1"),
+  R("ffsus","Sustained stress = Ms·nf·d(1−k)/Icr","ffs,sus","MPa",1,"Eq. 7.4.1",{res:1,chk:"ffsus"}),
+  {summary:true}
+];
+const RIGHT = [
+  H("BEAM CROSS-SECTION"),
+  {xsec:true},
+  H("5. SERVICE-LOAD SECTION ANALYSIS"),
+  R("MD","Dead load moment = wD·ℓ²/8","MD","kN·m",2,""),
+  R("ML","Live load moment = wL·ℓ²/8","ML","kN·m",2,""),
+  R("Ma","Service moment = MD + ML","Ma","kN·m",2,""),
+  R("Ms","Sustained moment = MD + PSL·ML","Ms","kN·m",2,""),
+  R("nf","Modular ratio = Ef/Ec","nf","",3,""),
+  R("k","k = √(2ρf·nf + (ρf·nf)²) − ρf·nf","k","",3,"Eq. 7.3.2.2b"),
+  R("Ig","Gross inertia = b·h³/12","Ig","mm⁴","e","") ,
+  R("Icr","Cracked inertia","Icr","mm⁴","e","Eq. 7.3.2.2a"),
+  R("Mcr","Cracking moment = 0.62λ√f'c·Ig/yt","Mcr","kN·m",2,"Eq. 7.3.2.2d"),
+  H("6. CRACK CONTROL"),
+  R("wmax","Allowable crack width","w","mm",2,"§7.3.1",NUM),
+  R("kb","Bond-dependent coefficient","kb","",2,"§7.3.1",NUM),
+  R("ffs","Service stress = Ma·nf·d(1−k)/Icr","ffs","MPa",1,"Eq. 7.4.1"),
+  R("beta","β = (h − kd)/(d − kd)","β","",3,""),
+  R("dc","Cover to bar centre = h − d","dc","mm",1,"",{chk:"dc"}),
+  R("dclim","Limit dc ≤ Ef·w/(2·ffs·β·kb)","dc,max","mm",1,"Eq. 7.3.1b"),
+  R("sprov","Bar spacing c/c = (b − 2dc,side)/(n − 1)","s","mm",1,"",{chk:"sprov"}),
+  R("smax","Max spacing = 1.15Ef·w/(ffs·kb) − 2.5cc","smax","mm",1,"Eq. 7.3.1a"),
+  R("sclr","Clear bar spacing ≥ max(db, 25)","sclear","mm",1,"318 §7.6",{chk:"sclr"}),
+  R("wcalc","Crack width = 2ffs/Ef·β·kb·√(dc²+(s/2)²)","w","mm",2,"440.1R-06",{res:1,chk:"wcalc"}),
+  H("7. DEFLECTION (LONG-TERM, ℓ/240)"),
+  R("IeD","Effective inertia under MD","(Ie)D","mm⁴","e","Eq. 7.3.2.2c"),
+  R("gam","γ = 1.72 − 0.72(Mcr/Ma)","γ","",3,"§7.3.2.2"),
+  R("IeDL","Effective inertia under MD+L","(Ie)D+L","mm⁴","e","Eq. 7.3.2.2c"),
+  R("dD","Immediate dead load = 5MDℓ²/(48Ec(Ie)D)","(Δi)D","mm",2,""),
+  R("dDL","Immediate dead + live","(Δi)D+L","mm",2,""),
+  R("dL","Immediate live = (Δi)D+L − (Δi)D","(Δi)L","mm",2,""),
+  R("dsus","Immediate sustained (with (Ie)D+L)","(Δi)sus","mm",2,""),
+  R("dLun","Unsustained live = (Δi)D+L − (Δi)sus","(Δi)L,un","mm",2,""),
+  R("xi","Time-dependent factor (≥ 5 years)","ξ","",1,"318 §9.5.2.5",NUM),
+  R("dinc","Δincr = 0.6ξ(Δi)sus + (Δi)L,un","Δincr","mm",2,"Eq. 7.3.2.3c",{res:1,chk:"dinc"}),
+  R("dall","Allowable = ℓ/240","Δallow","mm",2,"318 Tbl 9.5(b)"),
+  H("8. SHEAR"),
+  R("phiv","Strength reduction factor (shear)","ϕv","",2,"318 §9.3.2.3",NUM),
+  R("Vu","Vu at d from support = Vu,s − wu·d","Vu","kN",2,"318 §11.1.3"),
+  R("Vc","Concrete shear = 0.4√f'c·b·(kd)","Vc","kN",2,"Eq. 8.2a"),
+  R("phiVc","Design concrete shear","ϕVc","kN",2,""),
+  R("shneed","Shear reinforcement","","","txt",""),
+  R("Vsmax","Section limit: Vu − ϕVc ≤ ϕ0.66√f'c·b·d","","kN",2,"§8.2.3",{chk:"Vsmax"}),
+  R("rbdb","Bend radius ratio of stirrup","rb/db","",1,"§8.3 (≥3)",NUM),
+  R("ffb","Bent-bar strength = (0.05rb/db + 0.3)ffu","ffb","MPa",1,"Eq. 6.2.1"),
+  R("ffv","Design stirrup stress = 0.004Ef ≤ ffb","ffv","MPa",1,"Eq. 8.2d"),
+  R("Afv","Stirrup area (2 legs)","Afv","mm²",1,""),
+  R("s1","Spacing for strength = ϕAfv·ffv·d/(Vu − ϕVc)","s1","mm",0,"Eq. 8.2e"),
+  R("s2","Spacing for min. = Afv·ffv/(0.35b)","s2","mm",0,"Eq. 8.2.2"),
+  R("s3","Max spacing = d/2 ≤ 600 (d/4 ≤ 300 if high)","s3","mm",0,"§8.3"),
+  R("sadopt","Adopted stirrup spacing (rounded down to 25)","s","mm",0,"",{res:1,chk:"sadopt"}),
+];
+
+/* ------------------------------------------------------------------ formatting */
+function fmt(x, f){
+  if (typeof x === "string") return x;
+  if (x === Infinity) return "—";
+  if (!isFinite(x)) return "n/a";
+  if (f === "e"){ const e = Math.floor(Math.log10(Math.abs(x))); return (x/Math.pow(10,e)).toFixed(2)+"E+"+String(e).padStart(2,"0"); }
+  return x.toLocaleString("en-US",{minimumFractionDigits:f, maximumFractionDigits:f});
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const chkClass = c => c==="OK" ? "ok" : (c==="NG" ? "ng" : (c==="Info" ? "info-s" : ""));
+
+/* ------------------------------------------------------------------ build DOM once */
+function buildTable(rows, host){
+  let html = '<table class="calc"><colgroup><col class="c-lab"><col class="c-sym"><col class="c-val"><col class="c-unit"><col class="c-chk"><col class="c-ref"></colgroup><tbody>';
+  for (const r of rows){
+    if (r.h){ html += `<tr><th class="sec" colspan="6">${esc(r.h)}</th></tr>`; continue; }
+    if (r.xsec){ html += `<tr><td colspan="6" style="padding:0;border:0;height:auto"><div class="xsec"><svg id="xsvg" viewBox="0 0 180 256" role="img" aria-label="Beam cross-section"></svg><div><ul id="xlist"></ul><div class="note">Drawn to scale from the inputs.</div></div></div></td></tr>`; continue; }
+    if (r.summary){
+      html += `<tr><td colspan="6" style="border:0;height:10px"></td></tr><tr><th class="sec" colspan="6">DESIGN SUMMARY</th></tr>`;
+      for (const s of SUMMARY){ html += `<tr class="summary"><td class="lab">${esc(s.l)}</td><td colspan="3" id="sum-${s.k}"></td><td class="chk" id="sumc-${s.k}"></td><td></td></tr>`; }
+      continue;
+    }
+    let valCell;
+    if (r.input === "num") valCell = `<td class="val inp"><input type="number" data-k="${r.k}" step="${r.step||'any'}" aria-label="${esc(r.l)}"></td>`;
+    else if (r.input === "sel") valCell = `<td class="val inp"><select data-k="${r.k}" aria-label="${esc(r.l)}">${r.options.map(o=>`<option>${o}</option>`).join("")}</select></td>`;
+    else if (r.f === "txt") { html += `<tr><td>${esc(r.l)}</td><td colspan="5" class="txt" id="v-${r.k}"></td></tr>`; continue; }
+    else valCell = `<td class="val${r.res?' res':''}" id="v-${r.k}"></td>`;
+    html += `<tr><td title="${esc(r.l)}">${esc(r.l)}</td><td class="sym">${esc(r.s)}</td>${valCell}<td class="unit">${esc(r.u)}</td><td class="chk" ${r.chk?`id="c-${r.chk}"`:""}></td><td class="ref">${esc(r.ref)}</td></tr>`;
+  }
+  host.innerHTML = html + "</tbody></table>";
+}
+const SUMMARY = [
+  {k:"phiMn", l:"Flexure  (ϕMn ≥ Mu)", t:v=>`${fmt(v.phiMn,1)} ≥ ${fmt(v.Mu,1)} kN·m`},
+  {k:"hmax",  l:"Depth limit  (h < hmax)", t:v=>`${fmt(v.h,0)} < ${fmt(v.hmax,0)} mm`},
+  {k:"dc",    l:"Crack control  (dc, s)", t:v=>`dc ${fmt(v.dc,0)}≤${fmt(v.dclim,0)}, s ${fmt(v.sprov,0)}≤${fmt(v.smax,0)}`, c:v=>(v.C.dc==="OK" && v.C.sprov!=="NG")?"OK":"NG"},
+  {k:"wcalc", l:"Crack width", t:v=>`${fmt(v.wcalc,2)} ≤ ${fmt(v.wmax,2)} mm`},
+  {k:"dinc",  l:"Long-term deflection  (ℓ/240)", t:v=>`${fmt(v.dinc,1)} ≤ ${fmt(v.dall,1)} mm`},
+  {k:"ffsus", l:"Creep rupture  (limit·ffu)", t:v=>`${fmt(v.ffsus,1)} ≤ ${fmt(v.ffslim,1)} MPa`},
+  {k:"sadopt",l:"Shear stirrups", t:v=>`Ø${v.dst} @ ${fmt(v.sadopt,0)} mm c/c`},
+];
+const INFO = [["project","Project"],["beamNo","Beam No."],["location","Location"],["designer","Designed by"],["owner","Owner"],["date","Date"]];
+
+function buildInfo(){
+  const host = document.getElementById("info");
+  host.innerHTML = INFO.map(([k,l]) => `<div class="row"><label for="i-${k}">${l}</label><input id="i-${k}" data-k="${k}" data-text="1"></div>`).join("");
+}
+
+/* ------------------------------------------------------------------ cross-section SVG */
+function drawSection(v){
+  const svg = document.getElementById("xsvg");
+  const W = 180, Hh = 256, padL = 18, padR = 46, padT = 10, padB = 34;
+  const sc = Math.min((W-padL-padR)/v.b, (Hh-padT-padB)/v.h);
+  const bw = v.b*sc, hh = v.h*sc, x0 = padL + ((W-padL-padR)-bw)/2, y0 = padT;
+  const c = v.cov*sc, ds = Math.max(v.dst*sc, 1.2), rb = v.db*sc/2;
+  const yBar = y0 + hh - (v.cov+v.dst+v.db/2)*sc;
+  const xs = [];
+  const xl = x0 + (v.cov+v.dst+v.db/2)*sc, xr = x0 + bw - (v.cov+v.dst+v.db/2)*sc;
+  const n = Math.max(1, Math.round(v.n));
+  for (let j=0;j<n;j++) xs.push(n===1 ? (xl+xr)/2 : xl + j*(xr-xl)/(n-1));
+  const rh = Math.max(5*sc,2.2), yTop = y0 + (v.cov+v.dst)*sc + rh;
+  const ok = isFinite(sc) && sc>0 && v.d>0;
+  if (!ok){ svg.innerHTML = '<text x="90" y="128" text-anchor="middle" font-size="10" fill="#9c0006">Check geometry inputs</text>'; return; }
+  const arrow = (x1,y1,x2,y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#222" stroke-width=".7" marker-start="url(#ah)" marker-end="url(#ah)"/>`;
+  svg.innerHTML = `
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="#222"/></marker></defs>
+  <rect x="${x0}" y="${y0}" width="${bw}" height="${hh}" fill="#ececec" stroke="#111" stroke-width="1.3"/>
+  <rect x="${x0+c+ds/2}" y="${y0+c+ds/2}" width="${bw-2*c-ds}" height="${hh-2*c-ds}" rx="${Math.min(8,bw/8)}" fill="none" stroke="#1f4e9c" stroke-width="${ds}"/>
+  ${xs.map(x=>`<circle cx="${x}" cy="${yBar}" r="${rb}" fill="#1f4e9c" stroke="#111" stroke-width=".5"/>`).join("")}
+  <circle cx="${x0+c+ds+rh}" cy="${yTop}" r="${rh}" fill="#fff" stroke="#1f4e9c" stroke-width="1"/>
+  <circle cx="${x0+bw-c-ds-rh}" cy="${yTop}" r="${rh}" fill="#fff" stroke="#1f4e9c" stroke-width="1"/>
+  ${arrow(x0, y0+hh+12, x0+bw, y0+hh+12)}
+  <text x="${x0+bw/2}" y="${y0+hh+26}" text-anchor="middle" font-size="11" font-style="italic" font-family="Georgia,serif">b = ${fmt(v.b,0)}</text>
+  <line x1="${x0+bw}" y1="${y0}" x2="${x0+bw+38}" y2="${y0}" stroke="#222" stroke-width=".5"/>
+  <line x1="${x0+bw}" y1="${y0+hh}" x2="${x0+bw+38}" y2="${y0+hh}" stroke="#222" stroke-width=".5"/>
+  <line x1="${xr}" y1="${yBar}" x2="${x0+bw+18}" y2="${yBar}" stroke="#222" stroke-width=".5" stroke-dasharray="2 2"/>
+  ${arrow(x0+bw+12, y0, x0+bw+12, yBar)}
+  ${arrow(x0+bw+32, y0, x0+bw+32, y0+hh)}
+  <text x="${x0+bw+16}" y="${y0+(yBar-y0)/2}" font-size="11" font-style="italic" font-family="Georgia,serif" dominant-baseline="middle">d</text>
+  <text x="${x0+bw+36}" y="${y0+hh/2}" font-size="11" font-style="italic" font-family="Georgia,serif" dominant-baseline="middle">h</text>`;
+  document.getElementById("xlist").innerHTML = [
+    `b × h = ${fmt(v.b,0)} × ${fmt(v.h,0)} mm`,
+    `d = ${fmt(v.d,1)} mm`,
+    `Clear cover = ${fmt(v.cov,0)} mm`,
+    `Bottom: ${n} − ${v.fib} Ø${v.db}`,
+    `Af = ${fmt(v.Af,0)} mm²`,
+    `Stirrups: Ø${v.dst} @ ${fmt(v.sadopt,0)} mm`,
+    `Top hangers: 2 − Ø10 (nominal)`,
+    `Span ℓ = ${fmt(v.Ln,2)} m`
+  ].map(t=>`<li>${esc(t)}</li>`).join("");
+}
+
+/* ------------------------------------------------------------------ render */
+function setChk(el, c){ if (!el) return; el.textContent = c; el.className = "chk " + chkClass(c); }
+function render(){
+  const v = calc(S);
+  for (const r of LEFT.concat(RIGHT)){
+    if (!r.k || r.input) continue;
+    const el = document.getElementById("v-"+r.k);
+    if (el) el.textContent = fmt(v[r.k], r.f==="txt" ? 0 : r.f);
+  }
+  for (const k in v.C) setChk(document.getElementById("c-"+k), v.C[k]);
+  for (const s of SUMMARY){
+    document.getElementById("sum-"+s.k).textContent = s.t(v);
+    setChk(document.getElementById("sumc-"+s.k), s.c ? s.c(v) : v.C[s.k]);
+  }
+  const anyNG = Object.values(v.C).includes("NG");
+  document.getElementById("overallTxt").textContent = anyNG
+    ? "OVERALL: SECTION NOT ADEQUATE — revise b, h or reinforcement"
+    : `OVERALL: SECTION ADEQUATE — ${fmt(v.b,0)} × ${fmt(v.h,0)} mm, ${v.n} − Ø${v.db} ${v.fib}`;
+  setChk(document.getElementById("overallChk"), anyNG ? "NG" : "OK");
+  drawSection(v);
+  try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e) {}
+}
+
+function syncInputs(){
+  document.querySelectorAll("[data-k]").forEach(el => { const k = el.dataset.k; if (k in S) el.value = S[k]; });
+}
+
+function bind(){
+  document.querySelectorAll("[data-k]").forEach(el => {
+    el.addEventListener("input", () => {
+      const k = el.dataset.k;
+      if (el.tagName === "SELECT" || el.dataset.text) S[k] = el.value;
+      else { const x = parseFloat(el.value); if (!isNaN(x)) S[k] = x; else return; }
+      render();
+    });
+  });
+  document.getElementById("btnPrint").onclick = () => window.print();
+  document.getElementById("btnReset").onclick = () => { S = Object.assign({}, DEFAULTS); syncInputs(); render(); };
+  document.getElementById("btnSave").onclick = () => {
+    const blob = new Blob([JSON.stringify(S,null,2)], {type:"application/json"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `FRP_beam_${String(S.beamNo||"inputs").replace(/[^\w-]+/g,"_")}.json`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  };
+  const fl = document.getElementById("fileLoad");
+  document.getElementById("btnLoad").onclick = () => fl.click();
+  fl.onchange = () => { const f = fl.files[0]; if (!f) return; f.text().then(t => { try { S = Object.assign({}, DEFAULTS, JSON.parse(t)); syncInputs(); render(); } catch(e){ alert("Could not read that file."); } }); fl.value = ""; };
+  const lg = document.getElementById("fileLogo");
+  const pickLogo = () => lg.click();
+  document.getElementById("btnLogo").onclick = pickLogo;
+  document.getElementById("logoBox").onclick = pickLogo;
+  lg.onchange = () => { const f = lg.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { document.getElementById("logoImg").src = rd.result; }; rd.readAsDataURL(f); lg.value = ""; };
+}
+
+buildInfo();
+buildTable(LEFT, document.getElementById("colL"));
+buildTable(RIGHT, document.getElementById("colR"));
+syncInputs(); bind(); render();
+})();
+</script>
+</body>
+</html>
